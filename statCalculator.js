@@ -39,9 +39,11 @@ module.exports = {
   }
 }
 
+const DEFAULT_MOD_TIER = 5;
+const DEFAULT_MOD_LEVEL = 15;
+const DEFAULT_MOD_PIPS = 6;
 
 function calcRosterStats(units, options = {}) {
-  const calcGP = (options.calcGP || options.onlyGP);
   let count = 0;
   if (units.constructor === Array) { // units *should* be formatted like /player.roster
     let ships = [],
@@ -54,8 +56,7 @@ function calcRosterStats(units, options = {}) {
         ships.push( unit );
       } else { // is character
         crew[ defID ] = unit; // add to crew list to find quickly for ships
-        if (!options.onlyGP) unit.stats = calcCharStats(unit, options);
-        if (calcGP) unit.gp = calcCharGP( useValuesChar(unit, options.useValues) );
+        calcCharStats(unit, options);
       }
     });
     // get ship stats
@@ -63,11 +64,7 @@ function calcRosterStats(units, options = {}) {
       let defID = ship.defId || ship.definitionId.split(':')[0];
       if (!ship || !unitData[defID]) return;
       let crw = unitData[ defID ].crew.map(id => crew[id])
-      if (!options.onlyGP) ship.stats = calcShipStats(ship, crw, options);
-      if (calcGP) {
-        let {ship: s, crew: c} = useValuesShip(ship, crw, options.useValues);
-        ship.gp = calcShipGP(s, c);
-      }
+      calcShipStats(ship, crw, options);
     });
     count += units.length;
   } else { // units *should* be formated like /units or /roster
@@ -75,13 +72,20 @@ function calcRosterStats(units, options = {}) {
     ids.forEach( id => {
       units[ id ].forEach( unit => {
         if (unitData[ id ].combatType == 1) {
-          unit.stats = calcCharStats( { defId: id,
-                                        rarity: unit.starLevel,
-                                        level: unit.level,
-                                        gear: unit.gearLevel,
-                                        equipped: unit.gear.map( gearID => { return {equipmentId: gearID}; }),
-                                        mods: unit.mods
-                                      }, options);
+          const tempUnit = {
+            defId: id,
+            rarity: unit.starLevel,
+            level: unit.level,
+            gear: unit.gearLevel,
+            equipped: unit.gear.map( gearID => { return {equipmentId: gearID}; }),
+            mods: unit.mods
+          };
+          calcCharStats(tempUnit, options);
+
+          // assign modified values from calcCharStats back to the original units
+          tempUnit.stats && (unit.stats = tempUnit.stats);
+          tempUnit.gp && (unit.gp = tempUnit.gp);
+
           count++;
         }
       });
@@ -90,23 +94,47 @@ function calcRosterStats(units, options = {}) {
 
   return count;
 }
-function calcCharStats(char, options = {}) {
-  char = useValuesChar(char, options.useValues);
-  let stats = getCharRawStats(char);
-  stats = calculateBaseStats(stats, char.level, char.defId);
-  if (!options.withoutModCalc) { stats.mods = calculateModStats(stats.base, char); }
-  stats = formatStats(stats, char.level, options);
-  stats = renameStats(stats, options);
+
+function calcCharStats(unit, options = {}) {
+  let char = useValuesChar(unit, options.useValues);
+
+  let stats = {};
+  if (!options.onlyGP) {
+    stats = getCharRawStats(char);
+    stats = calculateBaseStats(stats, char.level, char.defId);
+    if (!options.withoutModCalc) { stats.mods = calculateModStats(stats.base, char); }
+    stats = formatStats(stats, char.level, options);
+    stats = renameStats(stats, options);
+
+    unit.stats = stats;
+  }
+
+  if (options.calcGP || options.onlyGP) {
+    unit.gp = calcCharGP(char);
+    stats.gp = unit.gp;
+  }
 
   return stats;
 }
-function calcShipStats(ship, crew, options = {}) {
+
+function calcShipStats(unit, crewMember, options = {}) {
   try {
-    ({ship, crew} = useValuesShip(ship, crew, options.useValues));
-    let stats = getShipRawStats(ship, crew);
-    stats = calculateBaseStats(stats, ship.level, ship.defId);
-    stats = formatStats(stats, ship.level, options);
-    stats = renameStats(stats, options);
+    let {ship, crew} = useValuesShip(unit, crewMember, options.useValues);
+
+    let stats = {};
+    if (!options.onlyGP) {
+      stats = getShipRawStats(ship, crew);
+      stats = calculateBaseStats(stats, ship.level, ship.defId);
+      stats = formatStats(stats, ship.level, options);
+      stats = renameStats(stats, options);
+
+      unit.stats = stats;
+    }
+
+    if (options.calcGP || options.onlyGP) {
+      unit.gp = calcShipGP(ship, crew);
+      stats.gp = unit.gp;
+    }
 
     return stats;
   } catch(e) {
@@ -690,6 +718,7 @@ function useValuesChar(char, useValues) {
     equippedStatMod: char.equippedStatMod,
     relic: char.relic,
     skills: char.skill.map( skill => { return { id: skill.id, tier: skill.tier + 2 }; })
+    // TODO set purchasedAbilityId
   };
   if (!useValues) return char;
 
@@ -701,8 +730,21 @@ function useValuesChar(char, useValues) {
     equipped: char.gear,
     mods: char.mods,
     equippedStatMod: char.equippedStatMod,
-    relic: useValues.char.relic ? {currentTier: useValues.char.relic } : char.relic
+    relic: useValues.char.relic ? {currentTier: useValues.char.relic } : char.relic,
+    skills: setSkills(char.defId, useValues.char.skills || char.skills || [])
+    // TODO set purchasedAbilityId
   };
+
+  if (useValues.char.modRarity || useValues.char.modLevel || useValues.char.modTier) {
+    unit.mods = [];
+    for (let i=0; i<6; i++) {
+      unit.mods.push({
+        pips: useValues.char.modRarity || DEFAULT_MOD_PIPS,
+        level: useValues.char.modLevel || DEFAULT_MOD_LEVEL,
+        tier: useValues.char.modTier || DEFAULT_MOD_TIER
+      });
+    }
+  }
 
   if (useValues.char.equipped == "all") {
     unit.equipped = [];
@@ -787,7 +829,11 @@ function useValuesShip(ship, crew, useValues) {
     if (useValues.crew.modRarity || useValues.crew.modLevel) {
       char.mods = [];
       for (let i=0; i<6; i++) {
-        char.mods.push({ pips: useValues.crew.modRarity || 6, level: useValues.crew.modLevel || 15 });
+        char.mods.push({
+          pips: useValues.crew.modRarity || DEFAULT_MOD_PIPS,
+          level: useValues.crew.modLevel || DEFAULT_MOD_LEVEL,
+          tier: useValues.crew.modTier || DEFAULT_MOD_TIER
+        });
       }
     }
 
@@ -796,14 +842,15 @@ function useValuesShip(ship, crew, useValues) {
 
   return {ship: ship, crew: chars};
 
-  function setSkills( unitID, val ) {
-    if (val == 'max')
-      return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: skill.maxTier}; });
-    else if (val == 'maxNoZeta')
-      return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: skill.maxTier - (skill.isZeta ? 1 : 0)}; });
-    else if ('number' == typeof val) // expecting an integer, 1-8, for skill level to use
-      return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: Math.min(val, skill.maxTier)}; });
-    else // expecting an array of skill objects
-      return val;
-  }
+}
+
+function setSkills( unitID, val ) {
+  if (val == 'max')
+    return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: skill.maxTier}; });
+  else if (val == 'maxNoZeta')
+    return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: skill.maxTier - (skill.isZeta ? 1 : 0)}; });
+  else if ('number' == typeof val) // expecting an integer, 1-8, for skill level to use
+    return unitData[ unitID ].skills.map(skill => { return {id: skill.id, tier: Math.min(val, skill.maxTier)}; });
+  else // expecting an array of skill objects
+    return val;
 }
