@@ -44,7 +44,7 @@ const DEFAULT_MOD_LEVEL = 15;
 const DEFAULT_MOD_PIPS = 6;
 
 function calcRosterStats(units, options = {}) {
-  let count = 0;
+  let returnUnits = {};
   if (units.constructor === Array) { // units *should* be formatted like /player.roster
     let ships = [],
         crew = {};
@@ -57,6 +57,11 @@ function calcRosterStats(units, options = {}) {
       } else { // is character
         crew[ defID ] = unit; // add to crew list to find quickly for ships
         calcCharStats(unit, options);
+        returnUnits [ defId ] = {
+          baseId: defID,
+          stats: unit.stats,
+          gp: char.gp
+        }
       }
     });
     // get ship stats
@@ -65,8 +70,12 @@ function calcRosterStats(units, options = {}) {
       if (!ship || !unitData[defID]) return;
       let crw = unitData[ defID ].crew.map(id => crew[id])
       calcShipStats(ship, crw, options);
+      returnUnits [ defId ] = {
+        baseId: defID,
+        stats: ship.stats,
+        gp: ship.gp
+      }
     });
-    count += units.length;
   } else { // units *should* be formated like /units or /roster
     const ids = Object.keys(units);
     ids.forEach( id => {
@@ -92,7 +101,7 @@ function calcRosterStats(units, options = {}) {
     });
   }
 
-  return count;
+  return returnUnits;
 }
 
 function calcCharStats(unit, options = {}) {
@@ -111,7 +120,7 @@ function calcCharStats(unit, options = {}) {
 
   if (options.calcGP || options.onlyGP) {
     unit.gp = calcCharGP(char);
-    stats.gp = unit.gp;
+    //stats.gp = unit.gp;
   }
 
   return stats;
@@ -133,7 +142,7 @@ function calcShipStats(unit, crewMember, options = {}) {
 
     if (options.calcGP || options.onlyGP) {
       unit.gp = calcShipGP(ship, crew);
-      stats.gp = unit.gp;
+      //stats.gp = unit.gp;
     }
 
     return stats;
@@ -561,7 +570,7 @@ function formatStats(stats, level, options) {
       });
     }
 
-    stats = gsStats;
+    stats.final = gsStats.final;
   }
 
   return stats;
