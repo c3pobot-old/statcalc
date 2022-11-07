@@ -58,10 +58,10 @@ function calcRosterStats(units, options = {}) {
       } else { // is character
         crew[ defID ] = unit; // add to crew list to find quickly for ships
         calcCharStats(unit, options);
-        returnUnits [ defId ] = {
+        returnUnits [ defID ] = {
           baseId: defID,
           stats: unit.stats,
-          gp: char.gp
+          gp: unit.gp
         }
       }
     });
@@ -71,7 +71,7 @@ function calcRosterStats(units, options = {}) {
       if (!ship || !unitData[defID]) return;
       let crw = unitData[ defID ].crew.map(id => crew[id])
       calcShipStats(ship, crw, options);
-      returnUnits [ defId ] = {
+      returnUnits [ defID ] = {
         baseId: defID,
         stats: ship.stats,
         gp: ship.gp
