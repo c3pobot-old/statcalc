@@ -19,11 +19,12 @@ module.exports = {
   calcRosterStats: calcRosterStats,
   calcPlayerStats: (players, options) => {
     if (players.constructor === Array) { // full profile array from /player
-      let count = 0;
+      let returnPlayers = {};
       players.forEach( player => {
-        count += calcRosterStats(player.roster || player.rosterUnit, options);
+        let pId = player.allyCode || player.playerId
+        returnPlayers[pId] = calcRosterStats(player.roster || player.rosterUnit, options);
       });
-      return count;
+      return returnPlayers;
     } else { // single player object
       return calcRosterStats(players.roster || players.rosterUnit, options);
     }
@@ -120,7 +121,7 @@ function calcCharStats(unit, options = {}) {
 
   if (options.calcGP || options.onlyGP) {
     unit.gp = calcCharGP(char);
-    //stats.gp = unit.gp;
+    stats.gp = unit.gp;
   }
 
   return stats;
@@ -142,7 +143,7 @@ function calcShipStats(unit, crewMember, options = {}) {
 
     if (options.calcGP || options.onlyGP) {
       unit.gp = calcShipGP(ship, crew);
-      //stats.gp = unit.gp;
+      stats.gp = unit.gp;
     }
 
     return stats;
