@@ -60,6 +60,7 @@ function calcRosterStats(units, options = {}) {
         calcCharStats(unit, options);
         returnUnits [ defID ] = {
           baseId: defID,
+          alignment: unitData[ defID ].alignment,
           stats: unit.stats,
           gp: unit.gp
         }
@@ -74,6 +75,7 @@ function calcRosterStats(units, options = {}) {
       returnUnits [ defID ] = {
         baseId: defID,
         stats: ship.stats,
+        alignment: unitData[ defID ].alignment,
         gp: ship.gp
       }
     });
