@@ -125,7 +125,6 @@ function calcCharStats(unit, options = {}) {
     unit.gp = calcCharGP(char);
     stats.gp = unit.gp;
   }
-
   return stats;
 }
 
@@ -618,12 +617,13 @@ function calcCharGP(char) {
   // Game tables for current gear include the possibility of differect GP per slot.
   // Currently, all values are identical across each gear level, so a simpler method is possible.
   // But that could change at any time.
+
   gp = char.equipped.reduce( (power, piece) => power + gpTables.gearPieceGP[ char.gear ][ piece.slot ], gp);
+
   gp = char.skills.reduce( (power, skill) => power + getSkillGP(char.defId, skill), gp);
   if (char.purchasedAbilityId) gp += char.purchasedAbilityId.length * gpTables.abilitySpecialGP.ultimate;
   if (char.mods) gp = char.mods.reduce( (power, mod) => power + gpTables.modRarityLevelTierGP[ mod.pips ][ mod.level ][ mod.tier ], gp);
   else if (char.equippedStatMod) gp = char.equippedStatMod.reduce( (power, mod) => power + gpTables.modRarityLevelTierGP[ +mod.definitionId[1] ][ mod.level ][ mod.tier ], gp)
-
   if (char.relic && char.relic.currentTier > 2) {
     gp += gpTables.relicTierGP[ char.relic.currentTier ];
     gp += char.level * gpTables.relicTierLevelFactor[ char.relic.currentTier ];
