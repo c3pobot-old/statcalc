@@ -109,7 +109,7 @@ function calcRosterStats(units, options = {}) {
 
 function calcCharStats(unit, options = {}) {
   let char = useValuesChar(unit, options.useValues);
-
+  
   let stats = {};
   if (!options.onlyGP) {
     stats = getCharRawStats(char);
@@ -729,7 +729,8 @@ function useValuesChar(char, useValues) {
     equipped: char.equipment,
     equippedStatMod: char.equippedStatMod,
     relic: char.relic,
-    skills: char.skill.map( skill => { return { id: skill.id, tier: skill.tier + 2 }; })
+    skills: char.skill.map( skill => { return { id: skill.id, tier: skill.tier + 2 }; }),
+    purchasedAbilityId: char.purchasedAbilityId
     // TODO set purchasedAbilityId
   };
   if (!useValues) return char;
