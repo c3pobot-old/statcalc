@@ -6,14 +6,7 @@ let unitData,  // global variables containing properly formatted game data.
     relicData;
 
 module.exports = {
-  setGameData: (gameData) => {
-    unitData = gameData.unitData;
-    gearData = gameData.gearData;
-    modSetData = gameData.modSetData;
-    crTables = gameData.crTables;
-    gpTables = gameData.gpTables;
-    relicData = gameData.relicData;
-  },
+  setGameData: setGameData,
   calcCharStats: calcCharStats,
   calcShipStats: calcShipStats,
   calcRosterStats: calcRosterStats,
@@ -43,7 +36,15 @@ module.exports = {
 const DEFAULT_MOD_TIER = 5;
 const DEFAULT_MOD_LEVEL = 15;
 const DEFAULT_MOD_PIPS = 6;
-
+function setGameData(gameData){
+  unitData = gameData.unitData;
+  gearData = gameData.gearData;
+  modSetData = gameData.modSetData;
+  crTables = gameData.crTables;
+  gpTables = gameData.gpTables;
+  relicData = gameData.relicData;
+  if(unitData) return true
+}
 function calcRosterStats(units, options = {}) {
   let returnUnits = {};
   if (units.constructor === Array) { // units *should* be formatted like /player.roster
@@ -109,7 +110,7 @@ function calcRosterStats(units, options = {}) {
 
 function calcCharStats(unit, options = {}) {
   let char = useValuesChar(unit, options.useValues);
-  
+
   let stats = {};
   if (!options.onlyGP) {
     stats = getCharRawStats(char);
