@@ -46,76 +46,46 @@ function setGameData(gameData){
   if(unitData) return true
 }
 function calcRosterStats(units, options = {}) {
-  let returnUnits = {};
-  if (units.constructor === Array) { // units *should* be formatted like /player.roster
-    let ships = [],
-        crew = {};
-    // get character stats
-    units.forEach( unit => {
-      let defID = unit.defId || unit.definitionId.split(':')[0];
-      if (!unit || !unitData[defID]) return;
-      if (unitData[ defID ].combatType == 2) { // is ship
-        ships.push( unit );
-      } else { // is character
-        crew[ defID ] = unit; // add to crew list to find quickly for ships
-        calcCharStats(unit, options);
-        returnUnits [ defID ] = {
-          baseId: defID,
-          alignment: unitData[ defID ].alignment,
-          stats: unit.stats,
-          gp: unit.gp
-        }
-      }
-    });
-    // get ship stats
-    ships.forEach( ship => {
-      let defID = ship.defId || ship.definitionId.split(':')[0];
-      if (!ship || !unitData[defID]) return;
-      let crw = unitData[ defID ].crew.map(id => crew[id])
-      calcShipStats(ship, crw, options);
-      returnUnits [ defID ] = {
-        baseId: defID,
-        stats: ship.stats,
-        alignment: unitData[ defID ].alignment,
-        gp: ship.gp
-      }
-    });
-  } else { // units *should* be formated like /units or /roster
-    const ids = Object.keys(units);
-    ids.forEach( id => {
-      units[ id ].forEach( unit => {
-        if (unitData[ id ].combatType == 1) {
-          const tempUnit = {
-            defId: id,
-            rarity: unit.starLevel,
-            level: unit.level,
-            gear: unit.gearLevel,
-            equipped: unit.gear.map( gearID => { return {equipmentId: gearID}; }),
-            mods: unit.mods
-          };
-          calcCharStats(tempUnit, options);
 
-          // assign modified values from calcCharStats back to the original units
-          tempUnit.stats && (unit.stats = tempUnit.stats);
-          tempUnit.gp && (unit.gp = tempUnit.gp);
-
-          count++;
-        }
-      });
-    });
-  }
-
-  return returnUnits;
+  let ships = [],
+      crew = {};
+      counts = { zetaCount: 0, omiCount: { total: 0, tb: 0, tw: 0, gac: 0, conquest: 0, raid: 0 }, sixModCount: 0 }
+  // get character stats
+  units.forEach( unit => {
+    let defID = unit.defId || unit.definitionId.split(':')[0];
+    if (!unit || !unitData[defID]) return;
+    if (unitData[ defID ].combatType == 2) { // is ship
+      ships.push( unit );
+    } else { // is character
+      crew[ defID ] = unit; // add to crew list to find quickly for ships
+      calcCharStats(unit, options, counts);
+      unit.baseId = defID
+      unit.alignment = unitData[ defID ].alignment
+      unit.combatType = 1
+      unit.sort = (+unit.currentTier || 0) +(+unit.relic?.currentTier || 0) + ((+unit.gp || 0) / 100000000)
+    }
+  });
+  // get ship stats
+  ships.forEach( ship => {
+    let defID = ship.defId || ship.definitionId.split(':')[0];
+    if (!ship || !unitData[defID]) return;
+    let crw = unitData[ defID ].crew.map(id => crew[id])
+    calcShipStats(ship, crw, options);
+    ship.alignment = unitData[ defID ].alignment
+    ship.baseId = defID
+    ship.combatType = 2
+    ship.sort = ((+ship.gp || 0) / 100000000)
+  });
 }
 
-function calcCharStats(unit, options = {}) {
+function calcCharStats(unit, options = {}, counts = {}) {
   let char = useValuesChar(unit, options.useValues);
 
   let stats = {};
   if (!options.onlyGP) {
     stats = getCharRawStats(char);
     stats = calculateBaseStats(stats, char.level, char.defId);
-    if (!options.withoutModCalc) { stats.mods = calculateModStats(stats.base, char); }
+    if (!options.withoutModCalc) { stats.mods = calculateModStats(stats.base, char, counts); }
     stats = formatStats(stats, char.level, options);
     stats = renameStats(stats, options);
 
@@ -123,10 +93,8 @@ function calcCharStats(unit, options = {}) {
   }
 
   if (options.calcGP || options.onlyGP) {
-    unit.gp = calcCharGP(char);
-    stats.gp = unit.gp;
+    unit.gp = calcCharGP(char, counts);
   }
-  return stats;
 }
 
 function calcShipStats(unit, crewMember, options = {}) {
@@ -145,10 +113,7 @@ function calcShipStats(unit, crewMember, options = {}) {
 
     if (options.calcGP || options.onlyGP) {
       unit.gp = calcShipGP(ship, crew);
-      stats.gp = unit.gp;
     }
-
-    return stats;
   } catch(e) {
     console.error(`Error on ship '${ship.defId}':\n${JSON.stringify(ship)}`);
     console.error(e.stack);
@@ -337,7 +302,7 @@ function calculateBaseStats(stats, level, baseID) {
     // missing mods don't exist in list
     ... ]
 */
-function calculateModStats(baseStats, char) {
+function calculateModStats(baseStats, char, counts = {}) {
   // return empty object if no mods
   if ( !char.mods && !char.equippedStatMod ) return {};
 
@@ -393,6 +358,7 @@ function calculateModStats(baseStats, char) {
   } else if (char.equippedStatMod) {
     char.equippedStatMod.forEach( mod => {
       let setBonus;
+      if(modDefMap?.[mod.?definitionId]?.rarity >= 6) counts.sixModCount++;
       if ( setBonus = setBonuses[ +mod.definitionId[0] ] ) {
         // set bonus already found, increment
         ++setBonus.count;
@@ -611,7 +577,8 @@ function renameStats(stats, options) {
 // ****** GP Calculations ******
 // *****************************
 
-function calcCharGP(char) {
+function calcCharGP(char, counts = {}) {
+
   let gp = gpTables.unitLevelGP[ char.level ];
   gp += gpTables.unitRarityGP[ char.rarity ];
   gp += gpTables.gearLevelGP[ char.gear ];
@@ -621,7 +588,7 @@ function calcCharGP(char) {
 
   gp = char.equipped.reduce( (power, piece) => power + gpTables.gearPieceGP[ char.gear ][ piece.slot ], gp);
 
-  gp = char.skills.reduce( (power, skill) => power + getSkillGP(char.defId, skill), gp);
+  gp = char.skills.reduce( (power, skill) => power + getSkillGP(char.defId, skill, counts), gp);
   if (char.purchasedAbilityId) gp += char.purchasedAbilityId.length * gpTables.abilitySpecialGP.ultimate;
   if (char.mods) gp = char.mods.reduce( (power, mod) => power + gpTables.modRarityLevelTierGP[ mod.pips ][ mod.level ][ mod.tier ], gp);
   else if (char.equippedStatMod) gp = char.equippedStatMod.reduce( (power, mod) => power + gpTables.modRarityLevelTierGP[ +mod.definitionId[1] ][ mod.level ][ mod.tier ], gp)
@@ -631,8 +598,27 @@ function calcCharGP(char) {
   }
   return floor( gp*1.5 );
 }
-function getSkillGP(id, skill) {
-  let oTag = unitData[ id ].skills.find( s => s.id == skill.id ).powerOverrideTags[ skill.tier ];
+const enumOmiType = {
+  5: 'tb',
+  4: 'raid',
+  6: 'tb',
+  7: 'tb',
+  8: 'tw',
+  9: 'gac',
+  11: 'conquest',
+  14: 'gac',
+  15: 'gac'
+}
+function getSkillGP(id, skill, counts) {
+  let tempSkill = unitData[ id ].skills.find( s => s.id == skill.id )
+  if(counts && tempSkill){
+    if(tempSkill.zetaTier && skill.tier >= tempSkill.zetaTier) counts.zetaCount++
+    if(enumOmiType[tempSkill.omicronMode] && skill.tier >= tempSkill.omiTier){
+      counts.omiCount[enumOmiType[tempSkill.omicronMode]]++
+      counts.omiCount.total++
+    }
+  }
+  let oTag = tempSkill?.powerOverrideTags[ skill.tier ];
   if (oTag)
     return gpTables.abilitySpecialGP[ oTag ];
   else
